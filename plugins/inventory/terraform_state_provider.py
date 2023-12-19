@@ -4,6 +4,17 @@
 # (see LICENSES/GPL-3.0-or-later.txt or https://www.gnu.org/licenses/gpl-3.0.txt)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# python imports
+import subprocess
+import shutil
+import tempfile
+import re
+import json
+
+# Ansible imports
+from ansible.module_utils.common import process
+from ansible.plugins.inventory import BaseInventoryPlugin, Constructable, Cacheable
+
 DOCUMENTATION = r'''
 name: terraform_state_provider
 author:
@@ -85,8 +96,8 @@ access_param:
   - public_ip
   - private_ip
 
-  # ansible-inventory example
-   $ ansible-inventory -i inv_tf.yml --graph --vars
+# ansible-inventory example
+$ ansible-inventory -i inv_tf.yml --graph --vars
 @all:
   |--@ungrouped:
   |--@tag_AlwaysUp_false:
@@ -96,136 +107,14 @@ access_param:
   |  |  |--{arn = arn:aws:ec2:us-east-2:992730955111:instance/i-08b59b54dbba650d6}
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
-  |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-08b59b54dbba650d6}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-015955607d9f3b25b}
-  |  |  |--{private_dns = ip-10-10-10-143.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.143}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 18.191.226.2}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-05d6685afecb73fb2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = dbserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = dbserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |  |--aws_instance.webserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
   |  |  |--{ansible_host = 3.144.148.143}
   |  |  |--{arn = arn:aws:ec2:us-east-2:992730955111:instance/i-0cd95df9eb91b83db}
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
-  |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-0cd95df9eb91b83db}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-0b1a3a64ff9b1b4a0}
-  |  |  |--{private_dns = ip-10-10-10-181.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.181}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 3.144.148.143}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-04b7c6a8cdfd983a2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = webserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = webserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |--@tag_Contact_dcostako_redhat_com:
   |  |--aws_instance.dbserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
@@ -234,135 +123,14 @@ access_param:
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
   |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-08b59b54dbba650d6}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-015955607d9f3b25b}
-  |  |  |--{private_dns = ip-10-10-10-143.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.143}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 18.191.226.2}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-05d6685afecb73fb2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = dbserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = dbserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |  |--aws_instance.webserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
   |  |  |--{ansible_host = 3.144.148.143}
   |  |  |--{arn = arn:aws:ec2:us-east-2:992730955111:instance/i-0cd95df9eb91b83db}
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
-  |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-0cd95df9eb91b83db}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-0b1a3a64ff9b1b4a0}
-  |  |  |--{private_dns = ip-10-10-10-181.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.181}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 3.144.148.143}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-04b7c6a8cdfd983a2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = webserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = webserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |--@tag_CreatedBy_TerraformViaAnsible:
   |  |--aws_instance.dbserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
@@ -371,67 +139,7 @@ access_param:
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
   |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-08b59b54dbba650d6}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-015955607d9f3b25b}
-  |  |  |--{private_dns = ip-10-10-10-143.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.143}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 18.191.226.2}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-05d6685afecb73fb2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = dbserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = dbserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |  |--aws_instance.webserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
   |  |  |--{ansible_host = 3.144.148.143}
@@ -440,66 +148,7 @@ access_param:
   |  |  |--{availability_zone = us-east-2c}
   |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
   |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-0cd95df9eb91b83db}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-0b1a3a64ff9b1b4a0}
-  |  |  |--{private_dns = ip-10-10-10-181.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.181}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 3.144.148.143}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-04b7c6a8cdfd983a2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = webserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = webserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |--@tag_DeleteBy_tomorrow:
   |  |--aws_instance.dbserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
@@ -507,136 +156,14 @@ access_param:
   |  |  |--{arn = arn:aws:ec2:us-east-2:992730955111:instance/i-08b59b54dbba650d6}
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
-  |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-08b59b54dbba650d6}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-015955607d9f3b25b}
-  |  |  |--{private_dns = ip-10-10-10-143.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.143}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 18.191.226.2}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-05d6685afecb73fb2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = dbserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = dbserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |  |--aws_instance.webserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
   |  |  |--{ansible_host = 3.144.148.143}
   |  |  |--{arn = arn:aws:ec2:us-east-2:992730955111:instance/i-0cd95df9eb91b83db}
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
-  |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-0cd95df9eb91b83db}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-0b1a3a64ff9b1b4a0}
-  |  |  |--{private_dns = ip-10-10-10-181.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.181}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 3.144.148.143}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-04b7c6a8cdfd983a2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = webserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = webserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |--@tag_Name_dbserver_tf:
   |  |--aws_instance.dbserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
@@ -645,67 +172,7 @@ access_param:
   |  |  |--{associate_public_ip_address = True}
   |  |  |--{availability_zone = us-east-2c}
   |  |  |--{capacity_reservation_specification_0_capacity_reservation_preference = open}
-  |  |  |--{cpu_core_count = 1}
-  |  |  |--{cpu_options_0_amd_sev_snp = }
-  |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-08b59b54dbba650d6}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-015955607d9f3b25b}
-  |  |  |--{private_dns = ip-10-10-10-143.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.143}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 18.191.226.2}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-05d6685afecb73fb2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = dbserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = dbserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ... snip ...
   |--@tag_Name_webserver_tf:
   |  |--aws_instance.webserver
   |  |  |--{ami = ami-0d91dda6e8a311f0c}
@@ -717,64 +184,7 @@ access_param:
   |  |  |--{cpu_core_count = 1}
   |  |  |--{cpu_options_0_amd_sev_snp = }
   |  |  |--{cpu_options_0_core_count = 1}
-  |  |  |--{cpu_options_0_threads_per_core = 1}
-  |  |  |--{cpu_threads_per_core = 1}
-  |  |  |--{credit_specification_0_cpu_credits = standard}
-  |  |  |--{disable_api_stop = False}
-  |  |  |--{disable_api_termination = False}
-  |  |  |--{ebs_optimized = False}
-  |  |  |--{enclave_options_0_enabled = False}
-  |  |  |--{get_password_data = False}
-  |  |  |--{hibernation = False}
-  |  |  |--{host_id = }
-  |  |  |--{iam_instance_profile = }
-  |  |  |--{id = i-0cd95df9eb91b83db}
-  |  |  |--{instance_initiated_shutdown_behavior = stop}
-  |  |  |--{instance_lifecycle = }
-  |  |  |--{instance_state = running}
-  |  |  |--{instance_type = t2.micro}
-  |  |  |--{ipv6_address_count = 0}
-  |  |  |--{key_name = ssh_key_name}
-  |  |  |--{maintenance_options_0_auto_recovery = default}
-  |  |  |--{metadata_options_0_http_endpoint = enabled}
-  |  |  |--{metadata_options_0_http_protocol_ipv6 = disabled}
-  |  |  |--{metadata_options_0_http_put_response_hop_limit = 1}
-  |  |  |--{metadata_options_0_http_tokens = optional}
-  |  |  |--{metadata_options_0_instance_metadata_tags = disabled}
-  |  |  |--{monitoring = False}
-  |  |  |--{outpost_arn = }
-  |  |  |--{password_data = }
-  |  |  |--{placement_group = }
-  |  |  |--{placement_partition_number = 0}
-  |  |  |--{primary_network_interface_id = eni-0b1a3a64ff9b1b4a0}
-  |  |  |--{private_dns = ip-10-10-10-181.us-east-2.compute.internal}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_a_record = False}
-  |  |  |--{private_dns_name_options_0_enable_resource_name_dns_aaaa_record = False}
-  |  |  |--{private_dns_name_options_0_hostname_type = ip-name}
-  |  |  |--{private_ip = 10.10.10.181}
-  |  |  |--{public_dns = }
-  |  |  |--{public_ip = 3.144.148.143}
-  |  |  |--{root_block_device_0_delete_on_termination = True}
-  |  |  |--{root_block_device_0_device_name = /dev/sda1}
-  |  |  |--{root_block_device_0_encrypted = False}
-  |  |  |--{root_block_device_0_iops = 3000}
-  |  |  |--{root_block_device_0_kms_key_id = }
-  |  |  |--{root_block_device_0_throughput = 125}
-  |  |  |--{root_block_device_0_volume_id = vol-04b7c6a8cdfd983a2}
-  |  |  |--{root_block_device_0_volume_size = 10}
-  |  |  |--{root_block_device_0_volume_type = gp3}
-  |  |  |--{source_dest_check = True}
-  |  |  |--{spot_instance_request_id = }
-  |  |  |--{subnet_id = subnet-0f4620cf83bf2ee17}
-  |  |  |--{tags_Name = webserver-tf}
-  |  |  |--{tags_all_AlwaysUp = false}
-  |  |  |--{tags_all_Contact = email_contact}
-  |  |  |--{tags_all_CreatedBy = TerraformViaAnsible}
-  |  |  |--{tags_all_DeleteBy = tomorrow}
-  |  |  |--{tags_all_Name = webserver-tf}
-  |  |  |--{tenancy = default}
-  |  |  |--{user_data_replace_on_change = False}
-  |  |  |--{vpc_security_group_ids_0 = sg-02ba887eb06a6c80c}
+  ...
 
 # Example playbook that accesses hostvars
 # note the use of remote_user may be required
@@ -818,22 +228,7 @@ ok: [aws_instance.webserver] => {
 PLAY RECAP *******************************************************************************************
 aws_instance.dbserver      : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
 aws_instance.webserver     : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0
-
-
-
 '''
-
-
-# python imports
-import subprocess
-import shutil
-import tempfile
-import re
-import json
-
-# Ansible imports
-from ansible.module_utils.common import process
-from ansible.plugins.inventory import BaseInventoryPlugin, Constructable, Cacheable
 
 class TerraformInventoryError(Exception):
     pass
